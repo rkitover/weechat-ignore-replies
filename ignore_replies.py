@@ -49,7 +49,7 @@ weechat.register(SCRIPT_NAME, SCRIPT_AUTHOR, SCRIPT_VERSION, SCRIPT_LICENSE, SCR
 
 nick_hosts = {}
 
-def track_nick_hosts(data, signal, signal_data):
+def track_nick_host(data, signal, signal_data):
     nick = weechat.info_get("irc_nick_from_host", signal_data)
     channel = re.split("\s+", signal_data)[-1]
     nick_host = re.split("\s+", signal_data)[0].split("@")[-1]
@@ -84,6 +84,7 @@ def ignore_replies(data, action, server, signal_data):
     channel = re.split("\s+", signal_data)[2]
 
     if channel[0] != '#': # channels only
+        weechat.infolist_free(ignores)
         return signal_data
 
     message = re.split("\s+", signal_data, 3)[3][1:]
@@ -91,14 +92,22 @@ def ignore_replies(data, action, server, signal_data):
     match = re.match("^(\S+)[^\w\s]\s", message)
 
     if not match: # only trigger for replies
+        weechat.infolist_free(ignores)
         return signal_data
 
     reply_to = match.group(1)
-    nick     = weechat.info_get("irc_nick_from_host", signal_data)
     buffer   = weechat.info_get("irc_buffer", "%s,%s" % (server, channel))
 
     if not buffer:
+        weechat.infolist_free(ignores)
         return signal_data
+
+    ignored_present = False
+
+    if not weechat.nicklist_search_nick(buffer, "", reply_to):
+        ignored_present = True
+
+    nick = weechat.info_get("irc_nick_from_host", signal_data)
 
     while weechat.infolist_next(ignores):
         ign_server = weechat.infolist_string(ignores, "server")
@@ -109,7 +118,7 @@ def ignore_replies(data, action, server, signal_data):
             next
         mask = weechat.infolist_string(ignores, "mask")
         if "@" in mask:
-            nick_mask, host_mask = re.split("@", mask)
+            nick_mask, host_mask = mask.split("@")
         else:
             nick_mask = mask
             host_mask = None
@@ -119,16 +128,16 @@ def ignore_replies(data, action, server, signal_data):
                 reply_to_host = nick_hosts[server][channel][reply_to]
             except:
                 reply_to_host = None
-            
-            if reply_to_host:
-                if not re.match(host_mask, reply_to_host):
-                    next
 
-        if re.match(nick_mask, reply_to):
+        if ((not host_mask or (reply_to_host and re.match(host_mask, reply_to_host)))
+           and re.match(nick_mask, reply_to)):
+            weechat.infolist_free(ignores)
             return ""
+
+    weechat.infolist_free(ignores)
 
     return signal_data
 
 weechat.hook_modifier("irc_in_privmsg", "ignore_replies", "")
-weechat.hook_signal("*,irc_raw_in_join", "track_nick_hosts", "")
+weechat.hook_signal("*,irc_raw_in_join", "track_nick_host", "")
 weechat.hook_signal("*,irc_raw_in_part", "remove_nick_host", "")
