@@ -47,35 +47,6 @@ import re
 
 weechat.register(SCRIPT_NAME, SCRIPT_AUTHOR, SCRIPT_VERSION, SCRIPT_LICENSE, SCRIPT_DESC, "", "")
 
-nick_hosts = {}
-
-def track_nick_host(data, signal, signal_data):
-    nick = weechat.info_get("irc_nick_from_host", signal_data)
-    channel = re.split("\s+", signal_data)[-1]
-    nick_host = re.split("\s+", signal_data)[0].split("@")[-1]
-    server = signal.split(",")[0]
-    if server not in nick_hosts:
-        nick_hosts[server] = {}
-    if channel not in nick_hosts[server]:
-        nick_hosts[server][channel] = {}
-    nick_hosts[server][channel][nick] = nick_host
-    return weechat.WEECHAT_RC_OK
-
-def remove_nick_host(data, signal, signal_data):
-    nick = weechat.info_get("irc_nick_from_host", signal_data)
-    channel = re.search("PART\s+(\S+)", signal_data).group(1)
-    nick_host = re.split("\s+", signal_data)[0].split("@")[-1]
-    server = signal.split(",")[0]
-    if server in nick_hosts:
-        if channel in nick_hosts[server]:
-            if nick in nick_hosts[server][channel]:
-                del nick_hosts[server][channel][nick]
-            if len(nick_hosts[server][channel]) == 0:
-                del nick_hosts[server][channel]
-            if len(nick_hosts[server]) == 0:
-                del nick_hosts[server]
-    return weechat.WEECHAT_RC_OK
-
 def ignore_replies(data, action, server, signal_data):
     ignores = weechat.infolist_get("irc_ignore", "", "")
     if not ignores:
@@ -129,6 +100,12 @@ def ignore_replies(data, action, server, signal_data):
             except:
                 reply_to_host = None
 
+            if not reply_to_host:
+                capture_whois = True
+                weechat.prnt("", "before whois")
+                weechat.command("", "/whois %s" % reply_to)
+                weechat.prnt("", "after whois")
+
         if ((not host_mask or (reply_to_host and re.match(host_mask, reply_to_host)))
            and re.match(nick_mask, reply_to)):
             weechat.infolist_free(ignores)
@@ -138,6 +115,53 @@ def ignore_replies(data, action, server, signal_data):
 
     return signal_data
 
+nick_hosts = {}
+
+def track_nick_host(data, signal, signal_data):
+    nick = weechat.info_get("irc_nick_from_host", signal_data)
+    channel = re.split("\s+", signal_data)[-1]
+    nick_host = re.split("\s+", signal_data)[0].split("@")[-1]
+    server = signal.split(",")[0]
+    if server not in nick_hosts:
+        nick_hosts[server] = {}
+    if channel not in nick_hosts[server]:
+        nick_hosts[server][channel] = {}
+    nick_hosts[server][channel][nick] = nick_host
+    return weechat.WEECHAT_RC_OK
+
+def remove_nick_host(data, signal, signal_data):
+    nick = weechat.info_get("irc_nick_from_host", signal_data)
+    channel = re.search("PART\s+(\S+)", signal_data).group(1)
+    nick_host = re.split("\s+", signal_data)[0].split("@")[-1]
+    server = signal.split(",")[0]
+    if server in nick_hosts:
+        if channel in nick_hosts[server]:
+            if nick in nick_hosts[server][channel]:
+                del nick_hosts[server][channel][nick]
+            if len(nick_hosts[server][channel]) == 0:
+                del nick_hosts[server][channel]
+            if len(nick_hosts[server]) == 0:
+                del nick_hosts[server]
+    return weechat.WEECHAT_RC_OK
+
+capture_whois = True
+
+def whois_cb(data, action, server, signal_data):
+    weechat.prnt("", "Got whois: data: %s action: %s server: %s signal_data: %s" % (data, action, server, signal_data))
+    return "" if capture_whois else signal_data
+
 weechat.hook_modifier("irc_in_privmsg", "ignore_replies", "")
 weechat.hook_signal("*,irc_raw_in_join", "track_nick_host", "")
 weechat.hook_signal("*,irc_raw_in_part", "remove_nick_host", "")
+weechat.hook_modifier("irc_in_311", "whois_cb", "")
+weechat.hook_modifier("irc_in_319", "whois_cb", "")
+weechat.hook_modifier("irc_in_312", "whois_cb", "")
+weechat.hook_modifier("irc_in_313", "whois_cb", "")
+weechat.hook_modifier("irc_in_338", "whois_cb", "")
+weechat.hook_modifier("irc_in_317", "whois_cb", "")
+weechat.hook_modifier("irc_in_330", "whois_cb", "")
+weechat.hook_modifier("irc_in_318", "whois_cb", "")
+weechat.hook_modifier("irc_in_314", "whois_cb", "")
+weechat.hook_modifier("irc_in_369", "whois_cb", "")
+weechat.hook_modifier("irc_in_401", "whois_cb", "")
+weechat.hook_modifier("irc_in_406", "whois_cb", "")
