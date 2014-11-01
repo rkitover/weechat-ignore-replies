@@ -4,7 +4,10 @@
 #
 # Version History:
 #
-# 0.0.1:
+# 0.0.2: 10/31/2014
+#   * code cleanups
+#   * upload to weechat.org
+# 0.0.1: 10/28/2014
 #   * initial release
 #   * hostmask ignores only work when there was a join from that user,
 #     will be fixed later, nick ignores always work
@@ -32,9 +35,9 @@
 
 SCRIPT_NAME    = "ignore_replies"
 SCRIPT_AUTHOR  = "Caelum <rkitover@gmail.com>"
-SCRIPT_VERSION = "0.0.1"
+SCRIPT_VERSION = "0.0.2"
 SCRIPT_LICENSE = "BSD"
-SCRIPT_DESC    = "ignores replies to ignored nicks"
+SCRIPT_DESC    = "ignores replies to ignored nicks, does NOT support hostmask ignores yet"
 
 try:
     import weechat
@@ -46,35 +49,6 @@ except:
 import re
 
 weechat.register(SCRIPT_NAME, SCRIPT_AUTHOR, SCRIPT_VERSION, SCRIPT_LICENSE, SCRIPT_DESC, "", "")
-
-nick_hosts = {}
-
-def track_nick_host(data, signal, signal_data):
-    nick = weechat.info_get("irc_nick_from_host", signal_data)
-    channel = re.split("\s+", signal_data)[-1]
-    nick_host = re.split("\s+", signal_data)[0].split("@")[-1]
-    server = signal.split(",")[0]
-    if server not in nick_hosts:
-        nick_hosts[server] = {}
-    if channel not in nick_hosts[server]:
-        nick_hosts[server][channel] = {}
-    nick_hosts[server][channel][nick] = nick_host
-    return weechat.WEECHAT_RC_OK
-
-def remove_nick_host(data, signal, signal_data):
-    nick = weechat.info_get("irc_nick_from_host", signal_data)
-    channel = re.search("PART\s+(\S+)", signal_data).group(1)
-    nick_host = re.split("\s+", signal_data)[0].split("@")[-1]
-    server = signal.split(",")[0]
-    if server in nick_hosts:
-        if channel in nick_hosts[server]:
-            if nick in nick_hosts[server][channel]:
-                del nick_hosts[server][channel][nick]
-            if len(nick_hosts[server][channel]) == 0:
-                del nick_hosts[server][channel]
-            if len(nick_hosts[server]) == 0:
-                del nick_hosts[server]
-    return weechat.WEECHAT_RC_OK
 
 def ignore_replies(data, action, server, signal_data):
     ignores = weechat.infolist_get("irc_ignore", "", "")
@@ -132,11 +106,39 @@ def ignore_replies(data, action, server, signal_data):
         if ((not host_mask or (reply_to_host and re.match(host_mask, reply_to_host)))
            and re.match(nick_mask, reply_to)):
             weechat.infolist_free(ignores)
-            return ""
+            return "" # silence message
 
     weechat.infolist_free(ignores)
-
     return signal_data
+
+nick_hosts = {}
+
+def track_nick_host(data, signal, signal_data):
+    nick = weechat.info_get("irc_nick_from_host", signal_data)
+    channel = re.split("\s+", signal_data)[-1]
+    nick_host = re.split("\s+", signal_data)[0].split("@")[-1]
+    server = signal.split(",")[0]
+    if server not in nick_hosts:
+        nick_hosts[server] = {}
+    if channel not in nick_hosts[server]:
+        nick_hosts[server][channel] = {}
+    nick_hosts[server][channel][nick] = nick_host
+    return weechat.WEECHAT_RC_OK
+
+def remove_nick_host(data, signal, signal_data):
+    nick = weechat.info_get("irc_nick_from_host", signal_data)
+    channel = re.search("PART\s+(\S+)", signal_data).group(1)
+    nick_host = re.split("\s+", signal_data)[0].split("@")[-1]
+    server = signal.split(",")[0]
+    if server in nick_hosts:
+        if channel in nick_hosts[server]:
+            if nick in nick_hosts[server][channel]:
+                del nick_hosts[server][channel][nick]
+            if len(nick_hosts[server][channel]) == 0:
+                del nick_hosts[server][channel]
+            if len(nick_hosts[server]) == 0:
+                del nick_hosts[server]
+    return weechat.WEECHAT_RC_OK
 
 weechat.hook_modifier("irc_in_privmsg", "ignore_replies", "")
 weechat.hook_signal("*,irc_raw_in_join", "track_nick_host", "")
