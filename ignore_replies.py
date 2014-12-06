@@ -4,6 +4,8 @@
 #
 # Version History:
 #
+# 0.0.3: 12/06/2014
+#   * match nicks case-insensitively
 # 0.0.2: 10/31/2014
 #   * code cleanups
 #   * upload to weechat.org
@@ -63,7 +65,7 @@ def ignore_replies(data, action, server, signal_data):
 
     message = re.split("\s+", signal_data, 3)[3][1:]
 
-    match = re.match("^(\S+)[^\w\s]\s", message)
+    match = re.match("^(\S+)[^\w\s]\s", message, re.I)
 
     if not match: # only trigger for replies
         weechat.infolist_free(ignores)
