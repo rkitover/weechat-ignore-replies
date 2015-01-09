@@ -4,10 +4,12 @@
 #
 # Version History:
 #
-# 0.0.4: 12/06/2014
-#   * match nick<space>text in reply re
-# 0.0.3: 12/06/2014
-#   * match nicks case-insensitively
+# 0.0.5: 01/09/2015
+#   * match nicks and hosts case-insensitively
+#   * better regex for matching replies
+#   * fix hostmask ignores match
+#   * clean up code
+#   * use irc_nick infolist instead of join/part events
 # 0.0.2: 10/31/2014
 #   * code cleanups
 #   * upload to weechat.org
@@ -39,7 +41,7 @@
 
 SCRIPT_NAME    = "ignore_replies"
 SCRIPT_AUTHOR  = "Caelum <rkitover@gmail.com>"
-SCRIPT_VERSION = "0.0.2"
+SCRIPT_VERSION = "0.0.5"
 SCRIPT_LICENSE = "BSD"
 SCRIPT_DESC    = "ignores replies to ignored nicks, does NOT support hostmask ignores yet"
 
@@ -65,25 +67,48 @@ def ignore_replies(data, action, server, signal_data):
         weechat.infolist_free(ignores)
         return signal_data
 
+    buffer = weechat.info_get("irc_buffer", "%s,%s" % (server, channel))
+
+    if not buffer: # check this is in an actual buffer/window
+        weechat.infolist_free(ignores)
+        return signal_data
+
     message = re.split("\s+", signal_data, 3)[3][1:]
 
-    match = re.match("^(\S+)[^\w\s]\s?", message, re.I)
+    match = re.match("""
+        ^
+        [^a-zA-Z0-9\[\]\\{}|_`\^-]*  # non-nick chars like a (
+        ([a-zA-Z0-9\[\]\\{}|_`\^-]+) # the nick chars of nick replying to
+        [^a-zA-Z0-9\[\]\\{}|_`\^-]*  # closing non-nick chars like a )
+        [:,]                         # char indicating reply, : or ,
+        """,
+        message,
+        re.VERBOSE
+    )
 
-    if not match: # only trigger for replies
+    if not match: # don't do anything for non-replies
         weechat.infolist_free(ignores)
         return signal_data
 
     reply_to = match.group(1)
-    buffer   = weechat.info_get("irc_buffer", "%s,%s" % (server, channel))
 
-    if not buffer:
+    chan_nicks = weechat.infolist_get("irc_nick", "", "%s,%s" % (server, channel))
+
+    nicks = []
+
+    while weechat.infolist_next(chan_nicks):
+        nicks.append({
+            "name": weechat.infolist_string(chan_nicks, "name"),
+            "host": weechat.infolist_string(chan_nicks, "host")
+        })
+
+    weechat.infolist_free(chan_nicks)
+
+    if reply_to.lower() not in [n["name"].lower() for n in nicks]: # replied to is not in the channel
         weechat.infolist_free(ignores)
         return signal_data
 
-    ignored_present = False
-
-    if not weechat.nicklist_search_nick(buffer, "", reply_to):
-        ignored_present = True
+    reply_to_host = [n["host"] for n in nicks if n["name"].lower() == reply_to.lower()][0]
 
     nick = weechat.info_get("irc_nick_from_host", signal_data)
 
@@ -96,54 +121,18 @@ def ignore_replies(data, action, server, signal_data):
             next
         mask = weechat.infolist_string(ignores, "mask")
         if "@" in mask:
-            nick_mask, host_mask = mask.split("@")
+            nick_mask = None
+            host_mask = mask
         else:
             nick_mask = mask
             host_mask = None
 
-        if host_mask:
-            try:
-                reply_to_host = nick_hosts[server][channel][reply_to]
-            except:
-                reply_to_host = None
-
-        if ((not host_mask or (reply_to_host and re.match(host_mask, reply_to_host)))
-           and re.match(nick_mask, reply_to)):
+        if ((nick_mask is not None and re.match(nick_mask, reply_to,      re.I)) or
+            (host_mask is not None and re.match(host_mask, reply_to_host, re.I))):
             weechat.infolist_free(ignores)
             return "" # silence message
 
     weechat.infolist_free(ignores)
     return signal_data
 
-nick_hosts = {}
-
-def track_nick_host(data, signal, signal_data):
-    nick = weechat.info_get("irc_nick_from_host", signal_data)
-    channel = re.split("\s+", signal_data)[-1]
-    nick_host = re.split("\s+", signal_data)[0].split("@")[-1]
-    server = signal.split(",")[0]
-    if server not in nick_hosts:
-        nick_hosts[server] = {}
-    if channel not in nick_hosts[server]:
-        nick_hosts[server][channel] = {}
-    nick_hosts[server][channel][nick] = nick_host
-    return weechat.WEECHAT_RC_OK
-
-def remove_nick_host(data, signal, signal_data):
-    nick = weechat.info_get("irc_nick_from_host", signal_data)
-    channel = re.search("PART\s+(\S+)", signal_data).group(1)
-    nick_host = re.split("\s+", signal_data)[0].split("@")[-1]
-    server = signal.split(",")[0]
-    if server in nick_hosts:
-        if channel in nick_hosts[server]:
-            if nick in nick_hosts[server][channel]:
-                del nick_hosts[server][channel][nick]
-            if len(nick_hosts[server][channel]) == 0:
-                del nick_hosts[server][channel]
-            if len(nick_hosts[server]) == 0:
-                del nick_hosts[server]
-    return weechat.WEECHAT_RC_OK
-
 weechat.hook_modifier("irc_in_privmsg", "ignore_replies", "")
-weechat.hook_signal("*,irc_raw_in_join", "track_nick_host", "")
-weechat.hook_signal("*,irc_raw_in_part", "remove_nick_host", "")
