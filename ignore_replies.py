@@ -4,6 +4,8 @@
 #
 # Version History:
 #
+# 0.0.6: 01/09/2015
+#   * tested to work in python3
 # 0.0.5: 01/09/2015
 #   * match nicks and hosts case-insensitively
 #   * better regex for matching replies
@@ -48,8 +50,8 @@ SCRIPT_DESC    = "ignores replies to ignored nicks, does NOT support hostmask ig
 try:
     import weechat
 except:
-    print "This script must be run under WeeChat."
-    print "Get WeeChat now at: http://www.weechat.org/"
+    print("This script must be run under WeeChat.")
+    print("Get WeeChat now at: http://www.weechat.org/")
     quit()
 
 import re
