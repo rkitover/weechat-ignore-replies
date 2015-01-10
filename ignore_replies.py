@@ -4,6 +4,8 @@
 #
 # Version History:
 #
+# 0.0.7: 01/10/2015
+#   * set correct version
 # 0.0.6: 01/09/2015
 #   * tested to work in python3
 # 0.0.5: 01/09/2015
@@ -43,7 +45,7 @@
 
 SCRIPT_NAME    = "ignore_replies"
 SCRIPT_AUTHOR  = "Caelum <rkitover@gmail.com>"
-SCRIPT_VERSION = "0.0.5"
+SCRIPT_VERSION = "0.0.7"
 SCRIPT_LICENSE = "BSD"
 SCRIPT_DESC    = "ignores replies to ignored nicks, does NOT support hostmask ignores yet"
 
